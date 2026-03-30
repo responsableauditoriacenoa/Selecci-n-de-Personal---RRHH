@@ -233,3 +233,20 @@ Portal Publico:
 - Main file path: `streamlit_app.py`
 - Requirements file: `requirements.txt` en la raiz
 - Secret recomendado: `BACKEND_URL = "https://tu-backend-publico.com"`
+
+### Flujo recomendado para que funcione en Cloud
+1. Desplegar backend publico (Render):
+  - Usa `render.yaml` en la raiz del repo.
+  - Render crea `rrhh-backend` + `rrhh-db`.
+  - El backend corre migraciones y seed automaticamente con `backend/start.sh`.
+2. Copiar URL publica del backend, por ejemplo:
+  - `https://rrhh-backend.onrender.com`
+3. Configurar Streamlit Cloud > App > Settings > Secrets:
+  - `BACKEND_URL = "https://rrhh-backend.onrender.com"`
+4. En Streamlit, usar `Cargar postulaciones`.
+  - La app consulta `GET /public/vacancies`.
+  - Muestra vacantes abiertas creadas en backoffice.
+  - Las postulaciones se envian a `POST /public/intake`.
+5. Verificacion final:
+  - Backend: `https://rrhh-backend.onrender.com/health`
+  - Streamlit: debe listar vacantes y permitir subir CV.
