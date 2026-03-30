@@ -27,6 +27,12 @@ def run_seed() -> None:
             )
             db.add(admin)
             db.flush()
+        else:
+            admin.full_name = "Administrador RRHH"
+            admin.hashed_password = get_password_hash("admin123")
+            admin.role = UserRole.ADMIN
+            admin.is_active = True
+            db.flush()
 
         company = db.scalar(select(Company).where(Company.name == "Empresa Demo"))
         if not company:

@@ -129,6 +129,20 @@ def _get_secret(name: str, default: str = "") -> str:
         return default
 
 
+def _is_local_backend_url(url: str) -> bool:
+    normalized = (url or "").lower().strip()
+    return normalized.startswith("http://127.0.0.1") or normalized.startswith("http://localhost")
+
+
+def _friendly_backend_error(exc: requests.RequestException, backend_url: str) -> str:
+    if _is_local_backend_url(backend_url):
+        return (
+            "No se pudo conectar con el backend porque estas usando una URL local (127.0.0.1/localhost). "
+            "En Streamlit Cloud debes usar la URL publica de tu API, por ejemplo https://tu-backend.onrender.com"
+        )
+    return f"No se pudo conectar con el backend: {exc}"
+
+
 DEFAULT_BACKEND_URL = os.getenv("BACKEND_URL", _get_secret("BACKEND_URL", "http://127.0.0.1:8000")).rstrip("/")
 DEFAULT_TOKEN = os.getenv("DEFAULT_TOKEN", _get_secret("DEFAULT_TOKEN", "")).strip()
 
@@ -152,6 +166,8 @@ with st.sidebar:
     typed_token = st.text_input("Token de vacante (opcional)", value=query_token)
     auto_fetch = st.button("Cargar postulaciones", use_container_width=True)
     st.caption("En Streamlit Cloud conviene definir BACKEND_URL en Secrets.")
+    if _is_local_backend_url(backend_url):
+        st.warning("127.0.0.1 solo funciona en local. En Streamlit Cloud usa la URL publica del backend.")
 
 
 def fetch_vacancy(base_url: str, token: str) -> dict[str, Any] | None:
@@ -187,7 +203,7 @@ if auto_fetch and backend_url:
     except requests.HTTPError as exc:
         st.error(f"No se pudieron obtener vacantes: {exc.response.text}")
     except requests.RequestException as exc:
-        st.error(f"No se pudo conectar con el backend: {exc}")
+        st.error(_friendly_backend_error(exc, backend_url))
 
 selected_token = ""
 vacancy_options = st.session_state.vacancy_options
@@ -220,7 +236,7 @@ if backend_url and vacancy_token:
             st.error(f"No se pudo cargar la vacante seleccionada: {exc.response.text}")
     except requests.RequestException as exc:
         if st.session_state.vacancy_data is None:
-            st.error(f"No se pudo conectar con el backend: {exc}")
+            st.error(_friendly_backend_error(exc, backend_url))
 
 
 vacancy = st.session_state.vacancy_data
@@ -355,7 +371,7 @@ with st.form("apply_form", clear_on_submit=False):
                 detail = exc.response.text if exc.response is not None else str(exc)
                 st.error(f"El backend rechazo la postulacion: {detail}")
             except requests.RequestException as exc:
-                st.error(f"No se pudo conectar con el backend: {exc}")
+                st.error(_friendly_backend_error(exc, backend_url))
 
 st.write("")
 st.caption("Main file path para Streamlit Cloud: streamlit_app.py")
