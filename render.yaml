@@ -4,7 +4,6 @@ services:
     env: docker
     plan: free
     dockerfilePath: ./backend/Dockerfile
-    rootDir: ./backend
     autoDeploy: true
     envVars:
       - key: APP_ENV
