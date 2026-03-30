@@ -137,6 +137,8 @@ if "vacancy_data" not in st.session_state:
     st.session_state.vacancy_data = None
 if "application_result" not in st.session_state:
     st.session_state.application_result = None
+if "vacancy_options" not in st.session_state:
+    st.session_state.vacancy_options = []
 
 
 query_params = st.query_params
@@ -147,8 +149,8 @@ query_backend = str(query_params.get("backend", DEFAULT_BACKEND_URL)).strip() if
 with st.sidebar:
     st.header("Configuracion")
     backend_url = st.text_input("Backend URL", value=query_backend or DEFAULT_BACKEND_URL, help="URL publica de tu API FastAPI")
-    vacancy_token = st.text_input("Token de vacante", value=query_token)
-    auto_fetch = st.button("Cargar vacante", use_container_width=True)
+    typed_token = st.text_input("Token de vacante (opcional)", value=query_token)
+    auto_fetch = st.button("Cargar postulaciones", use_container_width=True)
     st.caption("En Streamlit Cloud conviene definir BACKEND_URL en Secrets.")
 
 
@@ -156,6 +158,12 @@ def fetch_vacancy(base_url: str, token: str) -> dict[str, Any] | None:
     if not base_url or not token:
         return None
     response = requests.get(f"{base_url.rstrip('/')}/public/vacancy/{token}", timeout=API_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
+
+
+def fetch_public_vacancies(base_url: str) -> list[dict[str, Any]]:
+    response = requests.get(f"{base_url.rstrip('/')}/public/vacancies", timeout=API_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
@@ -171,21 +179,48 @@ def submit_application(base_url: str, form_data: dict[str, str], file_name: str,
     return response.json()
 
 
-if auto_fetch and backend_url and vacancy_token:
+if auto_fetch and backend_url:
+    try:
+        st.session_state.vacancy_options = fetch_public_vacancies(backend_url)
+        st.session_state.vacancy_data = None
+        st.session_state.application_result = None
+    except requests.HTTPError as exc:
+        st.error(f"No se pudieron obtener vacantes: {exc.response.text}")
+    except requests.RequestException as exc:
+        st.error(f"No se pudo conectar con el backend: {exc}")
+
+selected_token = ""
+vacancy_options = st.session_state.vacancy_options
+if vacancy_options:
+    labels: list[str] = []
+    tokens_by_label: dict[str, str] = {}
+    for item in vacancy_options:
+        empresa = item.get("empresa") or "Empresa"
+        localidad = item.get("localidad") or "Localidad"
+        area = item.get("area") or "Area"
+        titulo = item.get("titulo_publicacion") or "Vacante"
+        token = item.get("token") or ""
+        label = f"{titulo} - {empresa} - {localidad} - {area}"
+        labels.append(label)
+        tokens_by_label[label] = token
+
+    with st.sidebar:
+        selected_label = st.selectbox("Postulaciones disponibles", options=labels, index=0)
+        selected_token = tokens_by_label.get(selected_label, "")
+
+vacancy_token = selected_token or typed_token
+
+if backend_url and vacancy_token:
     try:
         st.session_state.vacancy_data = fetch_vacancy(backend_url, vacancy_token)
-        st.session_state.application_result = None
         query_params["token"] = vacancy_token
         query_params["backend"] = backend_url
     except requests.HTTPError as exc:
-        st.error(f"No se pudo cargar la vacante: {exc.response.text}")
+        if st.session_state.vacancy_data is None:
+            st.error(f"No se pudo cargar la vacante seleccionada: {exc.response.text}")
     except requests.RequestException as exc:
-        st.error(f"No se pudo conectar con el backend: {exc}")
-elif vacancy_token and backend_url and st.session_state.vacancy_data is None:
-    try:
-        st.session_state.vacancy_data = fetch_vacancy(backend_url, vacancy_token)
-    except Exception:
-        pass
+        if st.session_state.vacancy_data is None:
+            st.error(f"No se pudo conectar con el backend: {exc}")
 
 
 vacancy = st.session_state.vacancy_data
@@ -219,7 +254,7 @@ if result:
     st.stop()
 
 if not vacancy:
-    st.info("Carga un token de vacante y la URL del backend en la barra lateral para mostrar el formulario publico.")
+    st.info("Haz clic en Cargar postulaciones para ver vacantes disponibles o usa un token manual.")
     st.stop()
 
 

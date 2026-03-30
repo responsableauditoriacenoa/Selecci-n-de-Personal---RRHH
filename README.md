@@ -109,6 +109,7 @@ Cuando el frontend publico recibe una postulacion, el backend ejecuta el flujo o
   - GET /vacancies/{id}/applications
   - GET /vacancies/{id}/qr
 - Public
+  - GET /public/vacancies
   - GET /public/vacancy/{token}
   - POST /public/upload-cv
   - POST /public/applications

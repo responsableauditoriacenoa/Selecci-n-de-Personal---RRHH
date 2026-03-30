@@ -10,6 +10,16 @@ class PublicJobQuestionRead(BaseModel):
     orden: int
 
 
+class PublicVacancyListItem(BaseModel):
+    vacancy_id: int
+    token: str
+    titulo_publicacion: str
+    empresa: str = ""
+    localidad: str = ""
+    area: str = ""
+    public_url: str = ""
+
+
 class PublicVacancyRead(BaseModel):
     vacancy_id: int
     titulo_publicacion: str

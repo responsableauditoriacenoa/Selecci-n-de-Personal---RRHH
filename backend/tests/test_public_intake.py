@@ -77,6 +77,18 @@ def test_public_vacancy_returns_location_fields(client_and_session):
     assert payload["area"] == "Comercial"
 
 
+def test_public_vacancies_lists_available_tokens(client_and_session):
+    client, db_factory = client_and_session
+    _seed_public_vacancy(db_factory, token="vac-list-1")
+
+    response = client.get("/public/vacancies")
+    assert response.status_code == 200
+    items = response.json()
+    assert isinstance(items, list)
+    assert len(items) >= 1
+    assert any(item["token"] == "vac-list-1" for item in items)
+
+
 def test_public_intake_creates_application(client_and_session, monkeypatch):
     client, db_factory = client_and_session
     _seed_public_vacancy(db_factory, token="vac-intake")
