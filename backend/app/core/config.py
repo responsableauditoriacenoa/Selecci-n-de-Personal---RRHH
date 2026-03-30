@@ -8,10 +8,10 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     app_name: str = "Plataforma RRHH"
     app_env: str = "development"
-    secret_key: str
+    secret_key: str = "dev-insecure-secret-key"
     access_token_expire_minutes: int = 720
     backend_cors_origins: List[str] = ["http://localhost:5173"]
-    database_url: str
+    database_url: str = "sqlite:///./rrhh.db"
     public_base_url: str = "http://localhost:5173"
     upload_dir: str = "uploads"
 

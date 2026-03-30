@@ -55,23 +55,32 @@ def _run_seed() -> None:
 
 
 def main() -> None:
-    _validate_required_env()
-    os.environ["DATABASE_URL"] = _normalize_database_url(os.environ["DATABASE_URL"])
-
-    print("[startup] Waiting for database...")
-    _wait_for_database(os.environ["DATABASE_URL"])
-
-    print("[startup] Running database migrations...")
-    migrated = _run_alembic()
-    if not migrated:
-        print("[startup] Alembic failed. Falling back to metadata create_all().")
-        _fallback_create_all()
-
-    print("[startup] Running seed job...")
     try:
+        _validate_required_env()
+    except Exception as exc:
+        print(f"[startup] Env validation warning: {exc}")
+
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        os.environ["DATABASE_URL"] = _normalize_database_url(db_url)
+
+    try:
+        print("[startup] Waiting for database...")
+        if os.getenv("DATABASE_URL"):
+            _wait_for_database(os.environ["DATABASE_URL"])
+        else:
+            print("[startup] DATABASE_URL missing, skipping db wait.")
+
+        print("[startup] Running database migrations...")
+        migrated = _run_alembic()
+        if not migrated:
+            print("[startup] Alembic failed. Falling back to metadata create_all().")
+            _fallback_create_all()
+
+        print("[startup] Running seed job...")
         _run_seed()
     except Exception as exc:  # pragma: no cover
-        print(f"[startup] Seed failed (continuing): {exc}")
+        print(f"[startup] Setup warning (continuing): {exc}")
 
     port = int(os.getenv("PORT", "8000"))
     print(f"[startup] Starting API on port {port}")
