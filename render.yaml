@@ -26,8 +26,8 @@ services:
           name: rrhh-db
           property: connectionString
 
-  - type: pserv
-    name: rrhh-db
+databases:
+  - name: rrhh-db
     plan: free
     databaseName: rrhh
     user: rrhh_user
