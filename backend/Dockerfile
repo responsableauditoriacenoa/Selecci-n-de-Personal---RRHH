@@ -9,4 +9,4 @@ COPY backend/ .
 
 EXPOSE 8000
 
-CMD ["python", "start.py"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
