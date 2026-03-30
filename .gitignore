@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.sqlite3
+*.db
 backend/.venv/
 backend/.env
 backend/uploads/*
