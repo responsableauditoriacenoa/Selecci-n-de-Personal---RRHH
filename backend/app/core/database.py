@@ -7,7 +7,8 @@ from app.core.config import get_settings
 
 
 settings = get_settings()
-engine = create_engine(settings.database_url, future=True)
+_db_url = settings.database_url.replace("postgres://", "postgresql://", 1)
+engine = create_engine(_db_url, future=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 Base = declarative_base()
 
