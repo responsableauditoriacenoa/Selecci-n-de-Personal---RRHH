@@ -181,6 +181,13 @@ npm install
 npm run dev
 ```
 
+#### 4) Portal Streamlit (opcional)
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+Configura `BACKEND_URL` en `.streamlit/secrets.toml` o usa el campo lateral dentro de la app.
+
 ## Credenciales Seed
 - email: admin@rrhh.com
 - password: admin123
@@ -220,3 +227,8 @@ Portal Publico:
 3. Agregar tests unitarios y de integracion
 4. Expandir editor de requirements/questions en frontend
 5. Sumar filtros y reportes avanzados en dashboard
+
+## Deploy en Streamlit Cloud
+- Main file path: `streamlit_app.py`
+- Requirements file: `requirements.txt` en la raiz
+- Secret recomendado: `BACKEND_URL = "https://tu-backend-publico.com"`
