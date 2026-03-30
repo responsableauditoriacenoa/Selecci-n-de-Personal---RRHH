@@ -7,8 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 
-RUN chmod +x /app/start.sh
-
 EXPOSE 8000
 
-CMD ["/app/start.sh"]
+CMD ["python", "start.py"]
