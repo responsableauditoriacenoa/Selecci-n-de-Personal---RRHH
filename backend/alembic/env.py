@@ -9,7 +9,12 @@ from app.models import *  # noqa: F403
 
 config = context.config
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+_alembic_url = (
+    settings.database_url
+    .replace("postgres://", "postgresql+psycopg://", 1)
+    .replace("postgresql://", "postgresql+psycopg://", 1)
+)
+config.set_main_option("sqlalchemy.url", _alembic_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

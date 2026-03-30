@@ -7,7 +7,11 @@ from app.core.config import get_settings
 
 
 settings = get_settings()
-_db_url = settings.database_url.replace("postgres://", "postgresql://", 1)
+_db_url = (
+    settings.database_url
+    .replace("postgres://", "postgresql+psycopg://", 1)
+    .replace("postgresql://", "postgresql+psycopg://", 1)
+)
 engine = create_engine(_db_url, future=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 Base = declarative_base()
