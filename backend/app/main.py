@@ -27,6 +27,16 @@ app.include_router(vacancy_public.router, prefix="/public", tags=["public-vacanc
 app.include_router(applications_public.router, prefix="/public", tags=["public-applications"])
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {
+        "service": settings.app_name,
+        "status": "ok",
+        "health": "/health",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
