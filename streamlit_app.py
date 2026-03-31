@@ -160,6 +160,19 @@ query_token = str(query_params.get("token", DEFAULT_TOKEN)).strip() if query_par
 query_backend = str(query_params.get("backend", DEFAULT_BACKEND_URL)).strip() if query_params else DEFAULT_BACKEND_URL
 
 
+def _query_param_value(name: str) -> str:
+    value = st.query_params.get(name, "")
+    if isinstance(value, list):
+        return str(value[0]).strip() if value else ""
+    return str(value).strip()
+
+
+def _set_query_param_if_changed(name: str, value: str) -> None:
+    new_value = str(value).strip()
+    if _query_param_value(name) != new_value:
+        st.query_params[name] = new_value
+
+
 with st.sidebar:
     st.header("Configuracion")
     backend_url = st.text_input("Backend URL", value=query_backend or DEFAULT_BACKEND_URL, help="URL publica de tu API FastAPI")
@@ -229,8 +242,8 @@ vacancy_token = selected_token or typed_token
 if backend_url and vacancy_token:
     try:
         st.session_state.vacancy_data = fetch_vacancy(backend_url, vacancy_token)
-        query_params["token"] = vacancy_token
-        query_params["backend"] = backend_url
+        _set_query_param_if_changed("token", vacancy_token)
+        _set_query_param_if_changed("backend", backend_url)
     except requests.HTTPError as exc:
         if st.session_state.vacancy_data is None:
             st.error(f"No se pudo cargar la vacante seleccionada: {exc.response.text}")
