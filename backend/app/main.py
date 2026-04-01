@@ -1,14 +1,16 @@
 from pathlib import Path
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.routers.admin import applications, auth, job_profiles, org, reports, vacancies
 from app.routers.public import applications_public, vacancy_public
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 app = FastAPI(title=settings.app_name)
@@ -33,21 +35,48 @@ app.include_router(applications_public.router, prefix="/public", tags=["public-a
 PANEL_DIST_DIR = Path(__file__).resolve().parents[1] / "panel_dist"
 PANEL_ASSETS_DIR = PANEL_DIST_DIR / "assets"
 
+logger.info(f"Panel dist directory: {PANEL_DIST_DIR}")
+logger.info(f"Panel dist exists: {PANEL_DIST_DIR.exists()}")
+
 if PANEL_ASSETS_DIR.exists():
     app.mount("/panel/assets", StaticFiles(directory=PANEL_ASSETS_DIR), name="panel-assets")
+else:
+    logger.warning(f"Panel assets directory not found: {PANEL_ASSETS_DIR}")
 
 
 @app.get("/panel", include_in_schema=False)
-def panel_index() -> FileResponse:
-    return FileResponse(PANEL_DIST_DIR / "index.html")
+def panel_index() -> FileResponse | JSONResponse:
+    panel_index_file = PANEL_DIST_DIR / "index.html"
+    if not panel_index_file.exists():
+        logger.error(f"Panel index.html not found at {panel_index_file}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Panel not built",
+                "message": "panel_dist/index.html not found",
+                "checked_path": str(panel_index_file),
+            },
+        )
+    return FileResponse(panel_index_file)
 
 
 @app.get("/panel/{full_path:path}", include_in_schema=False)
-def panel_routes(full_path: str) -> FileResponse:
+def panel_routes(full_path: str) -> FileResponse | JSONResponse:
     candidate = PANEL_DIST_DIR / full_path
     if candidate.is_file():
         return FileResponse(candidate)
-    return FileResponse(PANEL_DIST_DIR / "index.html")
+    panel_index_file = PANEL_DIST_DIR / "index.html"
+    if not panel_index_file.exists():
+        logger.error(f"Panel index.html not found at {panel_index_file}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Panel not built",
+                "message": "panel_dist/index.html not found",
+                "checked_path": str(panel_index_file),
+            },
+        )
+    return FileResponse(panel_index_file)
 
 
 @app.get("/")
