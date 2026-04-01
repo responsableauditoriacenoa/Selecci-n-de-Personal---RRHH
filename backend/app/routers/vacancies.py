@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -19,6 +20,7 @@ from app.services.cv_parser import extract_text, save_upload_file
 from app.services.qr_service import build_public_url, generate_qr_base64, generate_qr_token
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _serialize_vacancy(entity: Vacancy) -> VacancyRead:
@@ -91,7 +93,11 @@ def create_route(
         file_path = save_upload_file(settings.upload_dir, descriptivo_file)
         entity.descriptivo_archivo_nombre = descriptivo_file.filename
         entity.descriptivo_archivo_path = file_path
-        entity.descriptivo_texto_extraido = extract_text(file_path)
+        try:
+            entity.descriptivo_texto_extraido = extract_text(file_path)
+        except HTTPException as exc:
+            logger.warning("No se pudo extraer texto de descriptivo '%s': %s", descriptivo_file.filename, exc.detail)
+            entity.descriptivo_texto_extraido = ""
 
     db.add(entity)
     db.flush()
@@ -159,7 +165,11 @@ def update_route(
         file_path = save_upload_file(settings.upload_dir, descriptivo_file)
         entity.descriptivo_archivo_nombre = descriptivo_file.filename
         entity.descriptivo_archivo_path = file_path
-        entity.descriptivo_texto_extraido = extract_text(file_path)
+        try:
+            entity.descriptivo_texto_extraido = extract_text(file_path)
+        except HTTPException as exc:
+            logger.warning("No se pudo extraer texto de descriptivo '%s': %s", descriptivo_file.filename, exc.detail)
+            entity.descriptivo_texto_extraido = ""
 
     log_action(db, user, "vacancy", entity.id, "update", payload.model_dump())
     db.commit()

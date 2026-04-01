@@ -1,6 +1,7 @@
 ﻿import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { Briefcase, Upload, CheckCircle, QrCode } from "lucide-react";
+import axios from "axios";
 import { vacancyService } from "../../services/vacancyService";
 
 const EMPRESAS = ["Autosol", "Autolux", "Ciel", "Cumbre Motors", "Kompas", "Portico", "La Luz"];
@@ -10,6 +11,8 @@ const AREAS = ["Comercial", "Administracion", "Postventa", "Planes de Ahorro", "
 export const VacancyFormPage = () => {
   const [created, setCreated] = useState<any | null>(null);
   const [descriptivoFile, setDescriptivoFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     empresa: EMPRESAS[0],
     localidad: LOCALIDADES[0],
@@ -22,8 +25,21 @@ export const VacancyFormPage = () => {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const response = await vacancyService.create(form, descriptivoFile);
-    setCreated(response);
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await vacancyService.create(form, descriptivoFile);
+      setCreated(response);
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const detail = (err.response?.data as { detail?: string })?.detail;
+        setError(detail || "No se pudo guardar la vacante. Intenta nuevamente.");
+      } else {
+        setError("No se pudo guardar la vacante. Intenta nuevamente.");
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -38,6 +54,11 @@ export const VacancyFormPage = () => {
       {!created ? (
         <div className="card">
           <form onSubmit={submit}>
+            {error && (
+              <div style={{ marginBottom: 14, border: "1px solid #ef4444", background: "#fef2f2", color: "#991b1b", padding: "10px 12px", borderRadius: 10, fontSize: "0.875rem" }}>
+                {error}
+              </div>
+            )}
             <div className="form-section">
               <div className="form-section-title">Información de la posición</div>
               <div className="form-grid">
@@ -91,9 +112,9 @@ export const VacancyFormPage = () => {
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-              <button type="submit" style={{ padding: "10px 24px" }}>
+              <button type="submit" style={{ padding: "10px 24px" }} disabled={saving}>
                 <Briefcase size={15} strokeWidth={2} />
-                Guardar y generar QR
+                {saving ? "Guardando..." : "Guardar y generar QR"}
               </button>
             </div>
           </form>
