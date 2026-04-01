@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -135,57 +136,66 @@ def create_route(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> VacancyCreateResponse:
-    resolved_job_profile_id, resolved_company_id, resolved_branch_id, resolved_area_id = _resolve_dependencies(
-        db,
-        user,
-        job_profile_id=job_profile_id,
-        company_id=company_id,
-        branch_id=branch_id,
-        area_id=area_id,
-        empresa=empresa,
-        localidad=localidad,
-        area_name=area,
-        titulo_publicacion=titulo_publicacion,
-    )
+    try:
+        resolved_job_profile_id, resolved_company_id, resolved_branch_id, resolved_area_id = _resolve_dependencies(
+            db,
+            user,
+            job_profile_id=job_profile_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            area_id=area_id,
+            empresa=empresa,
+            localidad=localidad,
+            area_name=area,
+            titulo_publicacion=titulo_publicacion,
+        )
 
-    payload = VacancyCreate(
-        job_profile_id=resolved_job_profile_id,
-        company_id=resolved_company_id,
-        branch_id=resolved_branch_id,
-        area_id=resolved_area_id,
-        empresa=empresa,
-        localidad=localidad,
-        area=area,
-        titulo_publicacion=titulo_publicacion,
-        descripcion_publicacion=descripcion_publicacion,
-        descriptivo_puesto=descriptivo_puesto,
-        fecha_apertura=fecha_apertura,
-        fecha_cierre=fecha_cierre,
-        estado=estado,
-    )
-    token = generate_qr_token()
-    entity = Vacancy(**payload.model_dump(), qr_token=token, public_url=build_public_url(token))
+        payload = VacancyCreate(
+            job_profile_id=resolved_job_profile_id,
+            company_id=resolved_company_id,
+            branch_id=resolved_branch_id,
+            area_id=resolved_area_id,
+            empresa=empresa,
+            localidad=localidad,
+            area=area,
+            titulo_publicacion=titulo_publicacion,
+            descripcion_publicacion=descripcion_publicacion,
+            descriptivo_puesto=descriptivo_puesto,
+            fecha_apertura=fecha_apertura,
+            fecha_cierre=fecha_cierre,
+            estado=estado,
+        )
+        token = generate_qr_token()
+        entity = Vacancy(**payload.model_dump(), qr_token=token, public_url=build_public_url(token))
 
-    if descriptivo_file is not None:
-        settings = get_settings()
-        file_path = save_upload_file(settings.upload_dir, descriptivo_file)
-        entity.descriptivo_archivo_nombre = descriptivo_file.filename
-        entity.descriptivo_archivo_path = file_path
-        try:
-            entity.descriptivo_texto_extraido = extract_text(file_path)
-        except HTTPException as exc:
-            logger.warning("No se pudo extraer texto de descriptivo '%s': %s", descriptivo_file.filename, exc.detail)
-            entity.descriptivo_texto_extraido = ""
+        if descriptivo_file is not None:
+            settings = get_settings()
+            file_path = save_upload_file(settings.upload_dir, descriptivo_file)
+            entity.descriptivo_archivo_nombre = descriptivo_file.filename
+            entity.descriptivo_archivo_path = file_path
+            try:
+                entity.descriptivo_texto_extraido = extract_text(file_path)
+            except HTTPException as exc:
+                logger.warning("No se pudo extraer texto de descriptivo '%s': %s", descriptivo_file.filename, exc.detail)
+                entity.descriptivo_texto_extraido = ""
 
-    db.add(entity)
-    db.flush()
-    log_action(db, user, "vacancy", entity.id, "create", payload.model_dump())
-    db.commit()
-    db.refresh(entity)
-    return VacancyCreateResponse(
-        **_serialize_vacancy(entity).model_dump(),
-        qr_base64_png=generate_qr_base64(entity.public_url),
-    )
+        db.add(entity)
+        db.flush()
+        log_action(db, user, "vacancy", entity.id, "create", payload.model_dump())
+        db.commit()
+        db.refresh(entity)
+        return VacancyCreateResponse(
+            **_serialize_vacancy(entity).model_dump(),
+            qr_base64_png=generate_qr_base64(entity.public_url),
+        )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Error SQL al crear vacante")
+        raise HTTPException(status_code=400, detail=f"Error al guardar en base de datos: {str(exc)}")
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Error inesperado al crear vacante")
+        raise HTTPException(status_code=500, detail=f"Error inesperado al crear vacante: {str(exc)}")
 
 
 @router.get("/{vacancy_id}", response_model=VacancyRead)
@@ -216,56 +226,61 @@ def update_route(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Vacancy:
-    resolved_job_profile_id, resolved_company_id, resolved_branch_id, resolved_area_id = _resolve_dependencies(
-        db,
-        user,
-        job_profile_id=job_profile_id,
-        company_id=company_id,
-        branch_id=branch_id,
-        area_id=area_id,
-        empresa=empresa,
-        localidad=localidad,
-        area_name=area,
-        titulo_publicacion=titulo_publicacion,
-    )
+    try:
+        resolved_job_profile_id, resolved_company_id, resolved_branch_id, resolved_area_id = _resolve_dependencies(
+            db,
+            user,
+            job_profile_id=job_profile_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            area_id=area_id,
+            empresa=empresa,
+            localidad=localidad,
+            area_name=area,
+            titulo_publicacion=titulo_publicacion,
+        )
 
-    payload = VacancyUpdate(
-        job_profile_id=resolved_job_profile_id,
-        company_id=resolved_company_id,
-        branch_id=resolved_branch_id,
-        area_id=resolved_area_id,
-        empresa=empresa,
-        localidad=localidad,
-        area=area,
-        titulo_publicacion=titulo_publicacion,
-        descripcion_publicacion=descripcion_publicacion,
-        descriptivo_puesto=descriptivo_puesto,
-        fecha_apertura=fecha_apertura,
-        fecha_cierre=fecha_cierre,
-        estado=estado,
-    )
-    entity = get_vacancy(db, vacancy_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Vacante no encontrada")
+        payload = VacancyUpdate(
+            job_profile_id=resolved_job_profile_id,
+            company_id=resolved_company_id,
+            branch_id=resolved_branch_id,
+            area_id=resolved_area_id,
+            empresa=empresa,
+            localidad=localidad,
+            area=area,
+            titulo_publicacion=titulo_publicacion,
+            descripcion_publicacion=descripcion_publicacion,
+            descriptivo_puesto=descriptivo_puesto,
+            fecha_apertura=fecha_apertura,
+            fecha_cierre=fecha_cierre,
+            estado=estado,
+        )
+        entity = get_vacancy(db, vacancy_id)
+        if not entity:
+            raise HTTPException(status_code=404, detail="Vacante no encontrada")
 
-    for field, value in payload.model_dump().items():
-        setattr(entity, field, value)
+        for field, value in payload.model_dump().items():
+            setattr(entity, field, value)
 
-    if descriptivo_file is not None:
-        settings = get_settings()
-        file_path = save_upload_file(settings.upload_dir, descriptivo_file)
-        entity.descriptivo_archivo_nombre = descriptivo_file.filename
-        entity.descriptivo_archivo_path = file_path
-        try:
-            entity.descriptivo_texto_extraido = extract_text(file_path)
-        except HTTPException as exc:
-            logger.warning("No se pudo extraer texto de descriptivo '%s': %s", descriptivo_file.filename, exc.detail)
-            entity.descriptivo_texto_extraido = ""
+        if descriptivo_file is not None:
+            settings = get_settings()
+            file_path = save_upload_file(settings.upload_dir, descriptivo_file)
+            entity.descriptivo_archivo_nombre = descriptivo_file.filename
+            entity.descriptivo_archivo_path = file_path
+            try:
+                entity.descriptivo_texto_extraido = extract_text(file_path)
+            except HTTPException as exc:
+                logger.warning("No se pudo extraer texto de descriptivo '%s': %s", descriptivo_file.filename, exc.detail)
+                entity.descriptivo_texto_extraido = ""
 
-    log_action(db, user, "vacancy", entity.id, "update", payload.model_dump())
-    db.commit()
-    db.refresh(entity)
-    return _serialize_vacancy(entity)
+        log_action(db, user, "vacancy", entity.id, "update", payload.model_dump())
+        db.commit()
+        db.refresh(entity)
+        return _serialize_vacancy(entity)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Error SQL al actualizar vacante")
+        raise HTTPException(status_code=400, detail=f"Error al actualizar en base de datos: {str(exc)}")
 
 
 @router.get("/{vacancy_id}/applications", response_model=list[ApplicationRead])
