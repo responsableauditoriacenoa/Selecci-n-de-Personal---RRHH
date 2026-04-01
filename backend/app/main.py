@@ -30,7 +30,7 @@ app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(vacancy_public.router, prefix="/public", tags=["public-vacancy"])
 app.include_router(applications_public.router, prefix="/public", tags=["public-applications"])
 
-PANEL_DIST_DIR = Path(__file__).resolve().parents[2] / "panel_dist"
+PANEL_DIST_DIR = Path(__file__).resolve().parents[1] / "panel_dist"
 PANEL_ASSETS_DIR = PANEL_DIST_DIR / "assets"
 
 if PANEL_ASSETS_DIR.exists():
