@@ -1,9 +1,9 @@
 from pathlib import Path
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
@@ -44,8 +44,8 @@ else:
     logger.warning(f"Panel assets directory not found: {PANEL_ASSETS_DIR}")
 
 
-@app.get("/panel", include_in_schema=False)
-def panel_index() -> FileResponse | JSONResponse:
+@app.get("/panel", include_in_schema=False, response_model=None)
+def panel_index() -> Response:
     panel_index_file = PANEL_DIST_DIR / "index.html"
     if not panel_index_file.exists():
         logger.error(f"Panel index.html not found at {panel_index_file}")
@@ -57,11 +57,15 @@ def panel_index() -> FileResponse | JSONResponse:
                 "checked_path": str(panel_index_file),
             },
         )
-    return FileResponse(panel_index_file)
+    response = FileResponse(panel_index_file)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
-@app.get("/panel/{full_path:path}", include_in_schema=False)
-def panel_routes(full_path: str) -> FileResponse | JSONResponse:
+@app.get("/panel/{full_path:path}", include_in_schema=False, response_model=None)
+def panel_routes(full_path: str) -> Response:
     candidate = PANEL_DIST_DIR / full_path
     if candidate.is_file():
         return FileResponse(candidate)
@@ -76,11 +80,20 @@ def panel_routes(full_path: str) -> FileResponse | JSONResponse:
                 "checked_path": str(panel_index_file),
             },
         )
-    return FileResponse(panel_index_file)
+    response = FileResponse(panel_index_file)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.get("/")
-def root() -> dict[str, str]:
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/panel/")
+
+
+@app.get("/api", include_in_schema=False)
+def api_info() -> dict[str, str]:
     return {
         "service": settings.app_name,
         "status": "ok",
