@@ -3,12 +3,16 @@ import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.candidate import Candidate
+from app.models.enums import JobProfileStatus
+from app.models.job_profile import JobProfile
+from app.models.organization import Area, Branch, Company
 from app.models.user import User
 from app.models.vacancy import Vacancy
 from app.repositories.application_repository import list_by_vacancy
@@ -21,6 +25,67 @@ from app.services.qr_service import build_public_url, generate_qr_base64, genera
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _resolve_dependencies(
+    db: Session,
+    user: User,
+    *,
+    job_profile_id: int,
+    company_id: int,
+    branch_id: int,
+    area_id: int,
+    empresa: str,
+    localidad: str,
+    area_name: str,
+    titulo_publicacion: str,
+) -> tuple[int, int, int, int]:
+    company = db.get(Company, company_id)
+    company_name = (empresa or "").strip() or "Empresa General"
+    if not company:
+        company = db.scalar(select(Company).where(Company.name == company_name))
+    if not company:
+        company = Company(name=company_name)
+        db.add(company)
+        db.flush()
+
+    branch = db.get(Branch, branch_id)
+    branch_name = (localidad or "").strip() or "Casa Central"
+    if not branch or branch.company_id != company.id:
+        branch = db.scalar(select(Branch).where(Branch.company_id == company.id, Branch.name == branch_name))
+    if not branch:
+        branch = Branch(company_id=company.id, name=branch_name)
+        db.add(branch)
+        db.flush()
+
+    area_entity = db.get(Area, area_id)
+    normalized_area_name = (area_name or "").strip() or "General"
+    if not area_entity:
+        area_entity = db.scalar(select(Area).where(Area.name == normalized_area_name))
+    if not area_entity:
+        area_entity = Area(name=normalized_area_name)
+        db.add(area_entity)
+        db.flush()
+
+    profile = db.get(JobProfile, job_profile_id)
+    if not profile:
+        profile = db.scalar(select(JobProfile).order_by(JobProfile.id.asc()))
+    if not profile:
+        profile = JobProfile(
+            nombre_puesto=titulo_publicacion.strip() or "Perfil General",
+            area_id=area_entity.id,
+            seniority="No definido",
+            modalidad="Presencial",
+            ubicacion=branch_name,
+            descripcion_general="Perfil generado automaticamente para permitir la carga de vacantes.",
+            version=1,
+            estado=JobProfileStatus.ACTIVO,
+            created_by=user.id,
+        )
+        db.add(profile)
+        db.flush()
+
+    return profile.id, company.id, branch.id, area_entity.id
 
 
 def _serialize_vacancy(entity: Vacancy) -> VacancyRead:
@@ -70,11 +135,24 @@ def create_route(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> VacancyCreateResponse:
-    payload = VacancyCreate(
+    resolved_job_profile_id, resolved_company_id, resolved_branch_id, resolved_area_id = _resolve_dependencies(
+        db,
+        user,
         job_profile_id=job_profile_id,
         company_id=company_id,
         branch_id=branch_id,
         area_id=area_id,
+        empresa=empresa,
+        localidad=localidad,
+        area_name=area,
+        titulo_publicacion=titulo_publicacion,
+    )
+
+    payload = VacancyCreate(
+        job_profile_id=resolved_job_profile_id,
+        company_id=resolved_company_id,
+        branch_id=resolved_branch_id,
+        area_id=resolved_area_id,
         empresa=empresa,
         localidad=localidad,
         area=area,
@@ -138,11 +216,24 @@ def update_route(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Vacancy:
-    payload = VacancyUpdate(
+    resolved_job_profile_id, resolved_company_id, resolved_branch_id, resolved_area_id = _resolve_dependencies(
+        db,
+        user,
         job_profile_id=job_profile_id,
         company_id=company_id,
         branch_id=branch_id,
         area_id=area_id,
+        empresa=empresa,
+        localidad=localidad,
+        area_name=area,
+        titulo_publicacion=titulo_publicacion,
+    )
+
+    payload = VacancyUpdate(
+        job_profile_id=resolved_job_profile_id,
+        company_id=resolved_company_id,
+        branch_id=resolved_branch_id,
+        area_id=resolved_area_id,
         empresa=empresa,
         localidad=localidad,
         area=area,
