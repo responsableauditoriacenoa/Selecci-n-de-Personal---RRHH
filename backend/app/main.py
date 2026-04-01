@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.routers.admin import applications, auth, job_profiles, org, reports, vacancies
@@ -25,6 +29,25 @@ app.include_router(applications.router, prefix="/applications", tags=["applicati
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(vacancy_public.router, prefix="/public", tags=["public-vacancy"])
 app.include_router(applications_public.router, prefix="/public", tags=["public-applications"])
+
+PANEL_DIST_DIR = Path(__file__).resolve().parents[2] / "panel_dist"
+PANEL_ASSETS_DIR = PANEL_DIST_DIR / "assets"
+
+if PANEL_ASSETS_DIR.exists():
+    app.mount("/panel/assets", StaticFiles(directory=PANEL_ASSETS_DIR), name="panel-assets")
+
+
+@app.get("/panel", include_in_schema=False)
+def panel_index() -> FileResponse:
+    return FileResponse(PANEL_DIST_DIR / "index.html")
+
+
+@app.get("/panel/{full_path:path}", include_in_schema=False)
+def panel_routes(full_path: str) -> FileResponse:
+    candidate = PANEL_DIST_DIR / full_path
+    if candidate.is_file():
+        return FileResponse(candidate)
+    return FileResponse(PANEL_DIST_DIR / "index.html")
 
 
 @app.get("/")

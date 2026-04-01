@@ -17,7 +17,7 @@ services:
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "720"
       - key: BACKEND_CORS_ORIGINS
-        value: '["https://YOUR-STREAMLIT-APP.streamlit.app","https://YOUR-INTERNAL-PANEL.onrender.com"]'
+        value: '["https://YOUR-STREAMLIT-APP.streamlit.app"]'
       - key: PUBLIC_BASE_URL
         value: https://YOUR-STREAMLIT-APP.streamlit.app
       - key: UPLOAD_DIR
@@ -28,22 +28,6 @@ services:
         fromDatabase:
           name: rrhh-db
           property: connectionString
-
-  - type: web
-    name: rrhh-panel
-    env: static
-    plan: free
-    rootDir: ./frontend
-    buildCommand: npm ci && npm run build
-    staticPublishPath: ./dist
-    autoDeploy: true
-    envVars:
-      - key: VITE_API_BASE_URL
-        value: https://rrhh-backend-i3km.onrender.com
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
 
 databases:
   - name: rrhh-db
