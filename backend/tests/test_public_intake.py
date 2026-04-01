@@ -117,6 +117,7 @@ def test_public_intake_creates_application(client_and_session, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["application_id"] > 0
-    assert body["message"] == "Postulacion enviada con analisis inicial"
-    assert isinstance(body["score_total"], int)
-    assert body["clasificacion"]
+    assert body["message"] == "Postulacion enviada correctamente"
+    assert "score_total" not in body
+    assert "clasificacion" not in body
+    assert "resumen_analisis" not in body

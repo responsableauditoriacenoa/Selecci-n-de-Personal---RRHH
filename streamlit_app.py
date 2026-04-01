@@ -96,19 +96,6 @@ CSS = """
         border-color: #bbf7d0;
         background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
     }
-    .score-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        font-size: 1rem;
-        font-weight: 800;
-        color: #166534;
-        background: #dcfce7;
-        border: 1px solid #bbf7d0;
-        border-radius: 999px;
-        padding: 0.5rem 0.8rem;
-        margin: 0.5rem 0 0.75rem 0;
-    }
     .small-note {
         color: #64748b;
         font-size: 0.8rem;
@@ -271,11 +258,7 @@ if result:
     st.markdown('<div class="success-card">', unsafe_allow_html=True)
     st.success("Postulacion enviada correctamente")
     st.markdown(f"**ID de postulacion:** {result.get('application_id', '-')}")
-    score_total = result.get("score_total", 0)
-    clasificacion = result.get("clasificacion", "sin clasificacion")
-    st.markdown(f'<div class="score-chip">Score {score_total}/100 · {clasificacion}</div>', unsafe_allow_html=True)
-    if result.get("resumen_analisis"):
-        st.write(result["resumen_analisis"])
+    st.caption("Gracias por postularte. El equipo de RRHH revisara tu perfil y se contactara contigo.")
     if st.button("Enviar otra postulacion", use_container_width=True):
         st.session_state.application_result = None
         st.rerun()

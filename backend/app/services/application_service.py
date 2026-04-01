@@ -112,8 +112,5 @@ def process_public_application(
 
     return PublicApplicationResult(
         application_id=application.id,
-        message="Postulacion enviada con analisis inicial",
-        score_total=score.score_total,
-        clasificacion=score.clasificacion,
-        resumen_analisis=score.resumen_analisis,
+        message="Postulacion enviada correctamente",
     )

@@ -55,6 +55,3 @@ class PublicApplicationCreate(BaseModel):
 class PublicApplicationResult(BaseModel):
     application_id: int
     message: str
-    score_total: int
-    clasificacion: str
-    resumen_analisis: str
