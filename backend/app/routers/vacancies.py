@@ -1,8 +1,10 @@
 from pathlib import Path
+import json
 import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -12,20 +14,79 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.candidate import Candidate
 from app.models.enums import JobProfileStatus
-from app.models.job_profile import JobProfile
+from app.models.job_profile import JobProfile, JobQuestion, JobRequirement
 from app.models.organization import Area, Branch, Company
 from app.models.user import User
 from app.models.vacancy import Vacancy
 from app.repositories.application_repository import list_by_vacancy
 from app.repositories.vacancy_repository import get_vacancy, list_vacancies
 from app.schemas.application import ApplicationRead, CandidateRead
-from app.schemas.vacancy import VacancyCreate, VacancyCreateResponse, VacancyQRRead, VacancyRead, VacancyUpdate
+from app.schemas.vacancy import VacancyCreate, VacancyCreateResponse, VacancyJobProfileConfig, VacancyQRRead, VacancyRead, VacancyUpdate
 from app.services.audit_service import log_action
 from app.services.cv_parser import extract_text, save_upload_file
 from app.services.qr_service import build_public_url, generate_qr_base64, generate_qr_token
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _parse_job_profile_config(raw_value: str) -> VacancyJobProfileConfig | None:
+    if not raw_value.strip():
+        return None
+    try:
+        return VacancyJobProfileConfig.model_validate(json.loads(raw_value))
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail=f"Configuracion de scoring invalida: {exc}")
+
+
+def _apply_job_profile_config(
+    db: Session,
+    user: User,
+    *,
+    profile_id: int | None,
+    area_id: int,
+    titulo_publicacion: str,
+    localidad: str,
+    config: VacancyJobProfileConfig,
+) -> int:
+    profile = db.get(JobProfile, profile_id) if profile_id else None
+    if not profile:
+        profile = JobProfile(
+            nombre_puesto=config.nombre_puesto.strip() or titulo_publicacion.strip() or "Perfil General",
+            area_id=area_id,
+            seniority=config.seniority.strip() or "No definido",
+            modalidad=config.modalidad.strip() or "Presencial",
+            ubicacion=config.ubicacion.strip() or localidad.strip() or "No definido",
+            descripcion_general=config.descripcion_general.strip() or "Perfil configurable generado desde vacante.",
+            scoring_dimensions=[item.model_dump() for item in config.scoring_dimensions],
+            version=1,
+            estado=JobProfileStatus.ACTIVO,
+            created_by=user.id,
+        )
+        db.add(profile)
+        db.flush()
+    else:
+        profile.nombre_puesto = config.nombre_puesto.strip() or titulo_publicacion.strip() or profile.nombre_puesto
+        profile.area_id = area_id
+        profile.seniority = config.seniority.strip() or profile.seniority
+        profile.modalidad = config.modalidad.strip() or profile.modalidad
+        profile.ubicacion = config.ubicacion.strip() or localidad.strip() or profile.ubicacion
+        profile.descripcion_general = config.descripcion_general.strip() or profile.descripcion_general
+        profile.scoring_dimensions = [item.model_dump() for item in config.scoring_dimensions]
+        profile.estado = JobProfileStatus.ACTIVO
+        profile.version += 1
+
+    db.query(JobRequirement).filter(JobRequirement.job_profile_id == profile.id).delete()
+    db.query(JobQuestion).filter(JobQuestion.job_profile_id == profile.id).delete()
+
+    for requirement in config.requirements:
+        db.add(JobRequirement(job_profile_id=profile.id, **requirement.model_dump()))
+
+    for question in config.questions:
+        db.add(JobQuestion(job_profile_id=profile.id, **question.model_dump()))
+
+    db.flush()
+    return profile.id
 
 
 def _resolve_dependencies(
@@ -132,11 +193,13 @@ def create_route(
     fecha_apertura: str = Form(...),
     fecha_cierre: str = Form(...),
     estado: str = Form(...),
+    job_profile_config_json: str = Form(""),
     descriptivo_file: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> VacancyCreateResponse:
     try:
+        job_profile_config = _parse_job_profile_config(job_profile_config_json)
         resolved_job_profile_id, resolved_company_id, resolved_branch_id, resolved_area_id = _resolve_dependencies(
             db,
             user,
@@ -149,6 +212,17 @@ def create_route(
             area_name=area,
             titulo_publicacion=titulo_publicacion,
         )
+
+        if job_profile_config is not None:
+            resolved_job_profile_id = _apply_job_profile_config(
+                db,
+                user,
+                profile_id=resolved_job_profile_id,
+                area_id=resolved_area_id,
+                titulo_publicacion=titulo_publicacion,
+                localidad=localidad,
+                config=job_profile_config,
+            )
 
         payload = VacancyCreate(
             job_profile_id=resolved_job_profile_id,
@@ -164,9 +238,10 @@ def create_route(
             fecha_apertura=fecha_apertura,
             fecha_cierre=fecha_cierre,
             estado=estado,
+            job_profile_config=job_profile_config,
         )
         token = generate_qr_token()
-        entity = Vacancy(**payload.model_dump(), qr_token=token, public_url=build_public_url(token))
+        entity = Vacancy(**payload.model_dump(exclude={"job_profile_config"}), qr_token=token, public_url=build_public_url(token))
 
         if descriptivo_file is not None:
             settings = get_settings()
@@ -222,11 +297,13 @@ def update_route(
     fecha_apertura: str = Form(...),
     fecha_cierre: str = Form(...),
     estado: str = Form(...),
+    job_profile_config_json: str = Form(""),
     descriptivo_file: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Vacancy:
     try:
+        job_profile_config = _parse_job_profile_config(job_profile_config_json)
         resolved_job_profile_id, resolved_company_id, resolved_branch_id, resolved_area_id = _resolve_dependencies(
             db,
             user,
@@ -239,6 +316,21 @@ def update_route(
             area_name=area,
             titulo_publicacion=titulo_publicacion,
         )
+
+        entity = get_vacancy(db, vacancy_id)
+        if not entity:
+            raise HTTPException(status_code=404, detail="Vacante no encontrada")
+
+        if job_profile_config is not None:
+            resolved_job_profile_id = _apply_job_profile_config(
+                db,
+                user,
+                profile_id=entity.job_profile_id or resolved_job_profile_id,
+                area_id=resolved_area_id,
+                titulo_publicacion=titulo_publicacion,
+                localidad=localidad,
+                config=job_profile_config,
+            )
 
         payload = VacancyUpdate(
             job_profile_id=resolved_job_profile_id,
@@ -254,12 +346,12 @@ def update_route(
             fecha_apertura=fecha_apertura,
             fecha_cierre=fecha_cierre,
             estado=estado,
+            job_profile_config=job_profile_config,
         )
-        entity = get_vacancy(db, vacancy_id)
-        if not entity:
-            raise HTTPException(status_code=404, detail="Vacante no encontrada")
 
         for field, value in payload.model_dump().items():
+            if field == "job_profile_config":
+                continue
             setattr(entity, field, value)
 
         if descriptivo_file is not None:

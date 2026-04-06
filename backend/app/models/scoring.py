@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Text
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -18,6 +18,7 @@ class ApplicationScore(Base):
     score_tecnico: Mapped[int] = mapped_column(Integer, default=0)
     score_preguntas: Mapped[int] = mapped_column(Integer, default=0)
     score_competencias: Mapped[int] = mapped_column(Integer, default=0)
+    dimension_scores: Mapped[list[dict[str, object]]] = mapped_column("dimension_scores_json", JSON, default=list)
     clasificacion: Mapped[str] = mapped_column(Text)
     resumen_analisis: Mapped[str] = mapped_column(Text)
     fecha_calculo: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { TrendingUp, TrendingDown, AlertCircle, ArrowLeft, Award } from "lucide-react";
 import { applicationService } from "../../services/applicationService";
@@ -7,6 +7,13 @@ const BAR_LABELS: Record<string, string> = {
   score_formacion: "Formación académica",
   score_experiencia: "Experiencia laboral",
   score_tecnico: "Perfil técnico",
+};
+
+type ScoreBar = {
+  key: string;
+  label: string;
+  value: number;
+  max: number;
 };
 
 export const ScoreViewPage = () => {
@@ -26,6 +33,22 @@ export const ScoreViewPage = () => {
   const fortalezas  = (score?.reasons || []).filter((r: any) => r.tipo === "fortaleza");
   const oportunidades = (score?.reasons || []).filter((r: any) => r.tipo === "observacion");
   const debilidades = (score?.reasons || []).filter((r: any) => r.tipo === "alerta" || r.tipo === "descarte");
+  const dimensionBars = useMemo<ScoreBar[]>(() => {
+    if (score?.dimension_scores?.length) {
+      return score.dimension_scores.map((item: any): ScoreBar => ({
+        key: item.key,
+        label: item.label,
+        value: item.score,
+        max: item.weight
+      }));
+    }
+    return (["score_formacion", "score_experiencia", "score_tecnico"] as const).map((key) => ({
+      key,
+      label: BAR_LABELS[key],
+      value: score?.[key] ?? 0,
+      max: 100
+    }));
+  }, [score]);
 
   const colorClass = total >= 70 ? "high" : total >= 50 ? "mid" : "low";
   const clasifColor = total >= 70 ? "var(--success)" : total >= 50 ? "var(--warning)" : "var(--danger)";
@@ -61,17 +84,18 @@ export const ScoreViewPage = () => {
 
         {/* Score bars */}
         <div className="score-bars">
-          {(["score_formacion", "score_experiencia", "score_tecnico"] as const).map((key) => {
-            const val = score?.[key] ?? 0;
-            const bc  = val >= 70 ? "high" : val >= 50 ? "mid" : "low";
+          {dimensionBars.map((bar) => {
+            const val = bar.value ?? 0;
+            const percent = Math.max(Math.min((val / Math.max(bar.max, 1)) * 100, 100), 0);
+            const bc  = percent >= 70 ? "high" : percent >= 50 ? "mid" : "low";
             return (
-              <div className="score-bar-row" key={key}>
+              <div className="score-bar-row" key={bar.key}>
                 <div className="score-bar-header">
-                  <span>{BAR_LABELS[key]}</span>
-                  <span style={{ fontWeight: 700 }}>{val}</span>
+                  <span>{bar.label}</span>
+                  <span style={{ fontWeight: 700 }}>{val}/{bar.max}</span>
                 </div>
                 <div style={{ background: "var(--border)", borderRadius: 99, height: 8, overflow: "hidden" }}>
-                  <div className={`score-bar-fill ${bc}`} style={{ width: `${val}%` }} />
+                  <div className={`score-bar-fill ${bc}`} style={{ width: `${percent}%` }} />
                 </div>
               </div>
             );

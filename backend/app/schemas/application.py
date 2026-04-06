@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.enums import ApplicationStatus, ScoreReasonType
 
@@ -18,6 +18,15 @@ class ScoreReasonRead(BaseModel):
     impacto: int
 
 
+class DimensionScoreRead(BaseModel):
+    key: str
+    label: str
+    weight: int
+    score: int
+    achieved_weight: int
+    possible_weight: int
+
+
 class ApplicationScoreRead(BaseModel):
     id: int
     score_total: int
@@ -26,19 +35,20 @@ class ApplicationScoreRead(BaseModel):
     score_tecnico: int
     score_preguntas: int
     score_competencias: int
+    dimension_scores: list[DimensionScoreRead] = Field(default_factory=list)
     clasificacion: str
     resumen_analisis: str
     fecha_calculo: datetime
-    reasons: list[ScoreReasonRead] = []
+    reasons: list[ScoreReasonRead] = Field(default_factory=list)
 
 
 class ApplicationInsightRead(BaseModel):
     application_id: int
-    fortalezas_detectadas: list[str] = []
-    debilidades_detectadas: list[str] = []
-    oportunidades_detectadas: list[str] = []
-    coincidencias_clave: list[str] = []
-    faltantes_relevantes: list[str] = []
+    fortalezas_detectadas: list[str] = Field(default_factory=list)
+    debilidades_detectadas: list[str] = Field(default_factory=list)
+    oportunidades_detectadas: list[str] = Field(default_factory=list)
+    coincidencias_clave: list[str] = Field(default_factory=list)
+    faltantes_relevantes: list[str] = Field(default_factory=list)
     conclusion_analitica: str
     generated_at: datetime
 

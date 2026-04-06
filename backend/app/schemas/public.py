@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class PublicJobQuestionRead(BaseModel):
@@ -8,6 +8,7 @@ class PublicJobQuestionRead(BaseModel):
     obligatoria: bool
     eliminatoria: bool
     orden: int
+    opciones: list[str] = Field(default_factory=list)
 
 
 class PublicVacancyListItem(BaseModel):
@@ -30,7 +31,7 @@ class PublicVacancyRead(BaseModel):
     company_name: str = ""
     branch_name: str = ""
     area_name: str = ""
-    questions: list[PublicJobQuestionRead] = []
+    questions: list[PublicJobQuestionRead] = Field(default_factory=list)
 
 
 class PublicApplicationAnswer(BaseModel):
@@ -49,7 +50,7 @@ class PublicApplicationCreate(BaseModel):
     linkedin: str | None = None
     consentimiento_datos: bool
     fuente: str = "qr_publico"
-    answers: list[PublicApplicationAnswer] = []
+    answers: list[PublicApplicationAnswer] = Field(default_factory=list)
 
 
 class PublicApplicationResult(BaseModel):

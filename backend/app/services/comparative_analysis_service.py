@@ -3,9 +3,9 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.scoring_parameters import KEYWORDS_BY_CLUSTER
-from app.models.application import Application, ApplicationAnswer, ApplicationInsight
-from app.models.job_profile import JobQuestion, JobRequirement
+from app.models.application import Application, ApplicationInsight
+from app.models.enums import ScoreReasonType
+from app.models.scoring import ApplicationScore, ScoreReason
 from app.models.vacancy import Vacancy
 
 
@@ -40,25 +40,10 @@ def generate_or_update_application_insight(
         raise ValueError("Application not found")
 
     vacancy = db.get(Vacancy, application.vacancy_id)
-    answers = db.scalars(select(ApplicationAnswer).where(ApplicationAnswer.application_id == application_id)).all()
-
-    requirements = []
-    questions = []
-    if vacancy and vacancy.job_profile_id:
-        requirements = db.scalars(select(JobRequirement).where(JobRequirement.job_profile_id == vacancy.job_profile_id)).all()
-        questions = db.scalars(select(JobQuestion).where(JobQuestion.job_profile_id == vacancy.job_profile_id)).all()
-
-    cv_text = (application.cv_text_extracted or "").lower()
-    answers_text = " ".join(item.respuesta.lower().strip() for item in answers)
-    evidence_text = f"{cv_text} {answers_text}".strip()
-
-    descriptive_text = (
-        (vacancy.descriptivo_puesto or "")
-        + " "
-        + (vacancy.descriptivo_texto_extraido or "")
-        + " "
-        + (vacancy.descripcion_publicacion or "")
-    ).lower()
+    score = db.scalar(select(ApplicationScore).where(ApplicationScore.application_id == application_id))
+    reasons = []
+    if score:
+        reasons = db.scalars(select(ScoreReason).where(ScoreReason.application_score_id == score.id)).all()
 
     fortalezas_detectadas: list[str] = []
     debilidades_detectadas: list[str] = []
@@ -66,53 +51,24 @@ def generate_or_update_application_insight(
     coincidencias_clave: list[str] = []
     faltantes_relevantes: list[str] = []
 
-    for req in requirements:
-        esperado = (req.valor_esperado or "").strip().lower()
-        if esperado and _contains(evidence_text, esperado):
-            coincidencias_clave.append(f"Coincide requisito {req.nombre}: se detecta evidencia de '{esperado}'.")
-            if req.obligatorio:
-                fortalezas_detectadas.append(f"Cumple requisito excluyente: {req.nombre}.")
-            else:
-                fortalezas_detectadas.append(f"Cumple requisito deseable: {req.nombre}.")
-        elif req.obligatorio:
-            msg = f"No se evidencia cumplimiento de requisito excluyente: {req.nombre}."
-            debilidades_detectadas.append(msg)
-            faltantes_relevantes.append(msg)
+    for reason in reasons:
+        if reason.tipo == ScoreReasonType.FORTALEZA:
+            fortalezas_detectadas.append(reason.descripcion)
+            coincidencias_clave.append(reason.descripcion)
+        elif reason.tipo in {ScoreReasonType.ALERTA, ScoreReasonType.DESCARTE}:
+            debilidades_detectadas.append(reason.descripcion)
+            faltantes_relevantes.append(reason.descripcion)
         else:
-            faltantes_relevantes.append(f"No surge evidencia del requisito deseable: {req.nombre}.")
+            oportunidades_detectadas.append(reason.descripcion)
+            faltantes_relevantes.append(reason.descripcion)
 
-    answer_map = {item.job_question_id: item.respuesta.strip().lower() for item in answers}
-    for question in questions:
-        value = answer_map.get(question.id, "")
-        if question.obligatoria and not value:
-            faltantes_relevantes.append(f"Sin respuesta en pregunta obligatoria de screening: {question.pregunta}")
-        elif value:
-            coincidencias_clave.append(f"Screening respondido: {question.pregunta}")
-            if question.eliminatoria and value in {"no", "false", "0"}:
-                debilidades_detectadas.append(f"Respuesta con riesgo eliminatorio en screening: {question.pregunta}")
+    if score and score.dimension_scores:
+        low_dimensions = [item for item in score.dimension_scores if int(item.get("score", 0)) <= max(int(item.get("weight", 0)) // 3, 1)]
+        for item in low_dimensions[:3]:
+            faltantes_relevantes.append(f"Dimension a reforzar: {item.get('label', 'Sin nombre')}.")
 
-    for token in KEYWORDS_BY_CLUSTER["tecnico"]:
-        if _contains(evidence_text, token):
-            if _contains(descriptive_text, token):
-                coincidencias_clave.append(f"Match tecnico: {token}")
-            else:
-                oportunidades_detectadas.append(f"Conocimiento adicional detectado no explicito en vacante: {token}")
-
-    for token in KEYWORDS_BY_CLUSTER["competencias"]:
-        if _contains(evidence_text, token):
-            if _contains(descriptive_text, token):
-                fortalezas_detectadas.append(f"Competencia alineada al puesto: {token}")
-            else:
-                oportunidades_detectadas.append(f"Competencia transferible detectada: {token}")
-
-    if "certificacion" in evidence_text or "certificado" in evidence_text:
-        oportunidades_detectadas.append("Presenta indicios de certificaciones o formacion complementaria.")
-
-    if "lider" in evidence_text or "liderazgo" in evidence_text:
-        oportunidades_detectadas.append("Muestra potencial para asumir responsabilidades de coordinacion o liderazgo.")
-
-    if len(cv_text.split()) < 60:
-        debilidades_detectadas.append("El CV contiene informacion limitada para validar integralmente el perfil.")
+    if vacancy and vacancy.area:
+        coincidencias_clave.append(f"Vacante analizada para el area {vacancy.area}.")
 
     # Deduplicate preserving insertion order.
     def _uniq(items: list[str]) -> list[str]:

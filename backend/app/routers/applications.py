@@ -16,6 +16,7 @@ from app.models.user import User
 from app.schemas.application import (
     ApplicationAnswerRead,
     ApplicationRead,
+    DimensionScoreRead,
     ApplicationInsightRead,
     ApplicationScoreRead,
     CandidateNoteCreate,
@@ -82,6 +83,17 @@ def detail_route(application_id: int, db: Session = Depends(get_db), _: User = D
             score_tecnico=score.score_tecnico,
             score_preguntas=score.score_preguntas,
             score_competencias=score.score_competencias,
+            dimension_scores=[
+                DimensionScoreRead(
+                    key=str(item.get("key", "general")),
+                    label=str(item.get("label", "Compatibilidad general")),
+                    weight=int(item.get("weight", 0) or 0),
+                    score=int(item.get("score", 0) or 0),
+                    achieved_weight=int(item.get("achieved_weight", 0) or 0),
+                    possible_weight=int(item.get("possible_weight", 0) or 0),
+                )
+                for item in (score.dimension_scores or [])
+            ],
             clasificacion=score.clasificacion,
             resumen_analisis=score.resumen_analisis,
             fecha_calculo=score.fecha_calculo,

@@ -1,8 +1,20 @@
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.enums import VacancyStatus
+from app.schemas.job_profile import JobQuestionBase, JobRequirementBase, ScoringDimensionBase
+
+
+class VacancyJobProfileConfig(BaseModel):
+    nombre_puesto: str = ""
+    seniority: str = ""
+    modalidad: str = ""
+    ubicacion: str = ""
+    descripcion_general: str = ""
+    scoring_dimensions: list[ScoringDimensionBase] = Field(default_factory=list)
+    requirements: list[JobRequirementBase] = Field(default_factory=list)
+    questions: list[JobQuestionBase] = Field(default_factory=list)
 
 
 class VacancyBase(BaseModel):
@@ -22,11 +34,11 @@ class VacancyBase(BaseModel):
 
 
 class VacancyCreate(VacancyBase):
-    pass
+    job_profile_config: VacancyJobProfileConfig | None = None
 
 
 class VacancyUpdate(VacancyBase):
-    pass
+    job_profile_config: VacancyJobProfileConfig | None = None
 
 
 class VacancyRead(VacancyBase):

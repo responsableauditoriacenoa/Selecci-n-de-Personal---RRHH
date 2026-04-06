@@ -1,10 +1,13 @@
 from datetime import date
 
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
-from app.models.enums import JobProfileStatus, UserRole, VacancyStatus
-from app.models.job_profile import JobProfile
+from app.models.application import Application
+from app.models.enums import JobProfileStatus, QuestionType, UserRole, VacancyStatus
+from app.models.job_profile import JobProfile, JobQuestion, JobRequirement
 from app.models.organization import Area, Branch, Company
+from app.models.scoring import ApplicationScore
 from app.models.user import User
 from app.models.vacancy import Vacancy
 
@@ -121,3 +124,118 @@ def test_public_intake_creates_application(client_and_session, monkeypatch):
     assert "score_total" not in body
     assert "clasificacion" not in body
     assert "resumen_analisis" not in body
+
+
+def test_public_intake_uses_configurable_scoring_rules(client_and_session, monkeypatch):
+    client, db_factory = client_and_session
+    vacancy = _seed_public_vacancy(db_factory, token="vac-score-config")
+
+    with db_factory() as db:
+        profile = db.get(JobProfile, vacancy.job_profile_id)
+        profile.scoring_dimensions = [
+            {"key": "formacion", "label": "Formación", "weight": 40},
+            {"key": "experiencia", "label": "Experiencia", "weight": 30},
+            {"key": "condiciones", "label": "Condiciones", "weight": 30},
+        ]
+        db.add_all(
+            [
+                JobRequirement(
+                    job_profile_id=profile.id,
+                    tipo="formacion",
+                    dimension="formacion",
+                    nombre="Secundario completo",
+                    descripcion="Secundario completo",
+                    obligatorio=True,
+                    peso=10,
+                    valor_esperado="secundario completo",
+                    keywords=["secundario completo"],
+                    match_mode="any",
+                    failure_mode="revisar",
+                ),
+                JobRequirement(
+                    job_profile_id=profile.id,
+                    tipo="experiencia",
+                    dimension="experiencia",
+                    nombre="Experiencia en recepción",
+                    descripcion="Experiencia en recepción",
+                    obligatorio=True,
+                    peso=10,
+                    valor_esperado="recepcion",
+                    keywords=["recepcion", "recepcionista"],
+                    match_mode="any",
+                    failure_mode="revisar",
+                ),
+                JobQuestion(
+                    job_profile_id=profile.id,
+                    pregunta="¿Tenés disponibilidad full time?",
+                    dimension="condiciones",
+                    tipo_respuesta=QuestionType.BOOLEANO,
+                    obligatoria=True,
+                    eliminatoria=True,
+                    peso=10,
+                    orden=1,
+                    opciones=[],
+                    respuestas_aceptadas=["si"],
+                    failure_mode="descarte",
+                ),
+            ]
+        )
+        db.commit()
+
+    monkeypatch.setattr("app.services.application_service.save_upload_file", lambda *_: "uploads/test_cv.pdf")
+    monkeypatch.setattr("app.services.application_service.extract_text", lambda *_: "secundario completo y experiencia en recepcion")
+
+    success_response = client.post(
+        "/public/intake",
+        data={
+            "token": "vac-score-config",
+            "nombre": "Laura",
+            "apellido": "Diaz",
+            "email": "laura.diaz@test.com",
+            "telefono": "388-222222",
+            "ciudad": "Salta",
+            "provincia": "Salta",
+            "linkedin": "",
+            "consentimiento_datos": "true",
+            "fuente": "qr_publico",
+            "answers_json": "[{\"job_question_id\": 1, \"respuesta\": \"si\"}]",
+        },
+        files={"file": ("cv.pdf", b"fake-pdf", "application/pdf")},
+    )
+
+    assert success_response.status_code == 200
+
+    reject_response = client.post(
+        "/public/intake",
+        data={
+            "token": "vac-score-config",
+            "nombre": "Mario",
+            "apellido": "Perez",
+            "email": "mario.perez@test.com",
+            "telefono": "388-333333",
+            "ciudad": "Salta",
+            "provincia": "Salta",
+            "linkedin": "",
+            "consentimiento_datos": "true",
+            "fuente": "qr_publico",
+            "answers_json": "[{\"job_question_id\": 1, \"respuesta\": \"no\"}]",
+        },
+        files={"file": ("cv.pdf", b"fake-pdf", "application/pdf")},
+    )
+
+    assert reject_response.status_code == 200
+
+    with db_factory() as db:
+        applications = db.scalars(select(Application).order_by(Application.id.asc())).all()
+        success_score = db.scalar(select(ApplicationScore).where(ApplicationScore.application_id == applications[0].id))
+        reject_score = db.scalar(select(ApplicationScore).where(ApplicationScore.application_id == applications[1].id))
+
+        assert success_score is not None
+        assert success_score.score_total == 100
+        assert success_score.clasificacion == "muy recomendado"
+        assert [item["score"] for item in success_score.dimension_scores] == [40, 30, 30]
+
+        assert reject_score is not None
+        assert reject_score.score_total == 70
+        assert reject_score.clasificacion == "baja compatibilidad"
+        assert any(item["key"] == "condiciones" and item["score"] == 0 for item in reject_score.dimension_scores)

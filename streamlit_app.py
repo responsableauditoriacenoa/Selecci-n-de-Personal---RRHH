@@ -318,8 +318,14 @@ with st.form("apply_form", clear_on_submit=False):
         for question in questions:
             question_id = int(question["id"])
             question_label = question.get("pregunta", "Pregunta")
-            if question.get("tipo_respuesta") == "booleano":
+            question_type = question.get("tipo_respuesta")
+            question_options = question.get("opciones", []) or []
+            if question_type == "booleano":
                 value = st.selectbox(question_label, options=["", "si", "no"], key=f"q_{question_id}")
+            elif question_type == "numerico":
+                value = st.text_input(question_label, key=f"q_{question_id}", placeholder="Ingresa un número")
+            elif question_type == "opcion" and question_options:
+                value = st.selectbox(question_label, options=[""] + [str(option) for option in question_options], key=f"q_{question_id}")
             else:
                 value = st.text_input(question_label, key=f"q_{question_id}")
             if str(value).strip():

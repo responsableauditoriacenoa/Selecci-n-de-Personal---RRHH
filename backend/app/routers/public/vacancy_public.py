@@ -85,6 +85,7 @@ def get_public_vacancy(token: str, db: Session = Depends(get_db)) -> PublicVacan
                 obligatoria=question.obligatoria,
                 eliminatoria=question.eliminatoria,
                 orden=question.orden,
+                opciones=question.opciones or [],
             )
             for question in questions
         ],
